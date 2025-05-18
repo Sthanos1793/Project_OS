@@ -4,6 +4,8 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include <dirent.h>
+#include <sys/stat.h>
 
 #define CMD_MAX 128
 #define _XOPEN_SOURCE 700
@@ -11,7 +13,10 @@
 pid_t monitor_pid = -1;
 int monitor_running = 0;
 
-// Handle SIGCHLD when monitor exits
+int pipefd[2];
+
+
+
 void handle_sigchld(int sig) {
     int status;
     pid_t pid = waitpid(monitor_pid, &status, WNOHANG);
@@ -28,6 +33,11 @@ void start_monitor() {
         return;
     }
 
+    if (pipe(pipefd) == -1) {
+        perror("pipe");
+        return;
+    }
+
     monitor_pid = fork();
     if (monitor_pid == -1) {
         perror("fork");
@@ -35,15 +45,21 @@ void start_monitor() {
     }
 
     if (monitor_pid == 0) {
-        // Child: monitor process
+        
+        close(pipefd[0]); 
+        dup2(pipefd[1], STDOUT_FILENO); 
+        close(pipefd[1]);
+
         execl("./treasure_monitor", "./treasure_monitor", NULL);
         perror("execl");
         exit(1);
     }
 
-    printf("Monitor started with PID %d\n", monitor_pid);
+    close(pipefd[1]); 
     monitor_running = 1;
+    printf("Monitor started with PID %d\n", monitor_pid);
 }
+
 
 void send_request_to_monitor(const char* command) {
     if (!monitor_running) {
@@ -63,6 +79,24 @@ void send_request_to_monitor(const char* command) {
     if (kill(monitor_pid, SIGUSR1) == -1) {
         perror("kill");
     }
+
+    char buffer[256];
+    ssize_t bytes;
+
+    printf("[Hub] Monitor output:\n");
+
+    while ((bytes = read(pipefd[0], buffer, sizeof(buffer)-1)) > 0) {
+        buffer[bytes] = '\0';
+        printf("%s", buffer);
+        if (bytes < sizeof(buffer)-1) break;
+    }
+
+}
+
+int is_hunt_dir(const char* name) {
+    struct stat st;
+    if (stat(name, &st) == -1) return 0;
+    return S_ISDIR(st.st_mode) && strncmp(name, "Hunt", 4) == 0;
 }
 
 
@@ -122,7 +156,58 @@ int main() {
                 printf("Requested monitor to stop. Waiting for termination...\n");
             }
         }
+
+        else if (strcmp(command, "calculate_score") == 0) {
+            DIR* d = opendir(".");
+            struct dirent* entry;
+
+            if (!d) {
+                perror("opendir");
+                continue;
+            }
+
+            while ((entry = readdir(d)) != NULL) {
+                if (!is_hunt_dir(entry->d_name)) continue;
+
+                int fd[2];
+                if (pipe(fd) == -1) {
+                    perror("pipe");
+                    continue;
+                }
+
+                pid_t pid = fork();
+                if (pid == -1) {
+                    perror("fork");
+                    continue;
+                }
+
+                if (pid == 0) {
+
+                    close(fd[0]);
+                    dup2(fd[1], STDOUT_FILENO);
+                    close(fd[1]);
+                    execl("./score_calc", "./score_calc", entry->d_name, NULL);
+                    perror("execl");
+                    exit(1);
+        } 
         
+                else {
+
+                    close(fd[1]);
+                    char buffer[256];
+                    ssize_t bytes;
+                    while ((bytes = read(fd[0], buffer, sizeof(buffer)-1)) > 0) {
+                        buffer[bytes] = '\0';
+                        printf("%s", buffer);
+            }
+                close(fd[0]);
+                waitpid(pid, NULL, 0); // clean up
+        }
+    }
+
+        closedir(d);
+}
+
         
         else if (strcmp(command, "exit") == 0) {
             if (monitor_running) {
