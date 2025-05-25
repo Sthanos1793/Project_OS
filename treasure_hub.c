@@ -1,4 +1,5 @@
 #define _XOPEN_SOURCE 700
+#define CMD_MAX 128
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,7 +10,7 @@
 #include <dirent.h>
 #include <sys/stat.h>
 
-#define CMD_MAX 128
+
 
 pid_t monitor_pid = -1;
 int monitor_running = 0;
