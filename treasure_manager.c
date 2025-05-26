@@ -13,6 +13,7 @@
 #define USERNAME_MAX 32
 #define CLUE_MAX 128
 #define BUFFER_SIZE 256
+#define PATH_BUFFER 2048
 
 typedef struct {
     int id;
@@ -223,7 +224,7 @@ void remove_treasure(const char* hunt_id, int treasure_id) {
 }
 
 void remove_hunt(const char* hunt_id) {
-    char dir_path[BUFFER_SIZE];
+    char dir_path[PATH_BUFFER];
     snprintf(dir_path, sizeof(dir_path), "%s", hunt_id);
 
     DIR* dir = opendir(dir_path);
@@ -233,7 +234,7 @@ void remove_hunt(const char* hunt_id) {
     }
 
     struct dirent* entry;
-    char file_path[BUFFER_SIZE];
+    char file_path[PATH_BUFFER];
 
     // Remove all files in the directory
     while ((entry = readdir(dir)) != NULL) {

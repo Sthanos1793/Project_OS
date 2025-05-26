@@ -1,4 +1,5 @@
 #define _XOPEN_SOURCE 700
+#define _DEFAULT_SOURCE
 #define CMD_MAX 128
 
 #include <stdio.h>
@@ -159,56 +160,27 @@ int main() {
             }
         }
 
-        else if (strcmp(command, "calculate_score") == 0) {
-            DIR* d = opendir(".");
-            struct dirent* entry;
+        else if (strncmp(command, "calculate_score ", 16) == 0) {
 
-            if (!d) {
-                perror("opendir");
-                continue;
+            char* hunt_id = command + 16;
+            if (strlen(hunt_id) == 0){
+                printf("Usage: calculate_score <hunt_id>\n");
             }
 
-            while ((entry = readdir(d)) != NULL) {
-                if (!is_hunt_dir(entry->d_name)) continue;
-
-                int fd[2];
-                if (pipe(fd) == -1) {
-                    perror("pipe");
-                    continue;
-                }
-
+            else {
                 pid_t pid = fork();
-                if (pid == -1) {
-                    perror("fork");
-                    continue;
-                }
-
-                if (pid == 0) {
-
-                    close(fd[0]);
-                    dup2(fd[1], STDOUT_FILENO);
-                    close(fd[1]);
-                    execl("./score_calc", "./score_calc", entry->d_name, NULL);
+                if (pid == 0){
+                    execl("./score_calculator", "score_calculator", hunt_id, NULL);
                     perror("execl");
                     exit(1);
-        } 
-        
+                }
                 else {
+                    wait(NULL);
+                }
 
-                    close(fd[1]);
-                    char buffer[256];
-                    ssize_t bytes;
-                    while ((bytes = read(fd[0], buffer, sizeof(buffer)-1)) > 0) {
-                        buffer[bytes] = '\0';
-                        printf("%s", buffer);
             }
-                close(fd[0]);
-                waitpid(pid, NULL, 0); // clean up
+            
         }
-    }
-
-        closedir(d);
-}
 
         
         else if (strcmp(command, "exit") == 0) {
